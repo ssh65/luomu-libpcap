@@ -284,6 +284,14 @@ impl<'a> Reader<'a> {
     pub fn wait_block(&self, timeout: Duration) -> Result<PacketIter<'a>, WaitError> {
         let idx = self.block_index;
         tracing::trace!("Waiting block {idx}");
+        // println!("DEBUG: Reader @{:p}", self);
+        // println!("DEBUG: Reader contents: block_index={}, blocks_ptr={:p}, blocks_len={}, sock_fd={:?}",
+        //     self.block_index,
+        //     self.blocks.as_ptr(),
+        //     self.blocks.len(),
+        //     self.sock.raw_fd()
+        // );
+        // Optionally print more about map if needed
         match self.sock.poll(timeout) {
             Ok(ready) => {
                 if !ready {
@@ -309,9 +317,28 @@ impl<'a> Reader<'a> {
     /// ready for capturing new packets and advance `Reader` to poll next
     /// block when `wait_block()` is called.
     pub fn flush_block(&mut self) {
+        println!("DEBUG (before flush): Reader @{:p}", self);
+        let next_index = (self.block_index + 1) % self.blocks.len();
+        println!("DEBUG (before flush): block_index={}, blocks_ptr={:p}, blocks_len={}, sock_fd={:?}, block_num_packets={}, block_next_num_packets={}",
+            self.block_index,
+            self.blocks.as_ptr(),
+            self.blocks.len(),
+            self.sock.raw_fd(),
+            self.blocks[self.block_index].get_number_of_packets(),
+            self.blocks[next_index].get_number_of_packets()
+        );
+
         tracing::trace!("Flushing block {}", self.block_index);
         self.blocks[self.block_index].flush();
         self.block_index = (self.block_index + 1) % self.blocks.len();
+        println!("DEBUG (after flush): Reader @{:p}", self);
+        println!("DEBUG (after flush): block_index={}, blocks_ptr={:p}, blocks_len={}, sock_fd={:?}, block_num_packets={}",
+            self.block_index,
+            self.blocks.as_ptr(),
+            self.blocks.len(),
+            self.sock.raw_fd(),
+            self.blocks[self.block_index].get_number_of_packets(),
+        );
     }
 }
 

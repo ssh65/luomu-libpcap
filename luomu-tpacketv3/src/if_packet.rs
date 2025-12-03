@@ -25,12 +25,21 @@ pub const PACKET_FANOUT_EBPF: libc::c_int = 7;
 // FANOUT flags
 pub const PACKET_FANOUT_FLAG_ROLLOVER: libc::c_int = 0x1000;
 pub const PACKET_FANOUT_FLAG_UNIQUEID: libc::c_int = 0x2000;
-pub const PACKET_FLANOUT_FLAG_DEFRAG: libc::c_int = 0x800;
+pub const PACKET_FANOUT_FLAG_DEFRAG: libc::c_int = 0x8000;
 
 pub const TP_STATUS_KERNEL: u32 = 0;
-pub const TP_STATUS_USER: u32 = 1;
+pub const TP_STATUS_USER: u32 = 1 << 0;
+pub const TP_STATUS_COPY: u32 = 1 << 1;
+pub const TP_STATUS_LOSING: u32 = 1 << 2;
+pub const TP_STATUS_CSUMNOTREADY: u32 = 1 << 3;
 pub const TP_STATUS_VLAN_VALID: u32 = 1 << 4;
+pub const TP_STATUS_BLK_TMO: u32 = 1 << 5;
 pub const TP_STATUS_VLAN_TPID_VALID: u32 = 1 << 6;
+pub const TP_STATUS_CSUM_VALID: u32 = 1 << 7;
+pub const TP_STATUS_GSO_TCP: u32 = 1 << 8;
+pub const TP_STATUS_TS_SOFTWARE: u32 = 1 << 29;
+pub const TP_STATUS_TS_SYS_HARDWARE: u32 = 1 << 30; /* deprecated, never set */
+pub const TP_STATUS_TS_RAW_HARDWARE: u32 = 1u32 << 31;
 
 #[repr(C)]
 pub struct tpacket_req3 {
@@ -68,22 +77,44 @@ pub struct tpacket3_hdr {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Copy, Clone)]
 pub struct tpacket_bd_ts {
     pub ts_sec: libc::c_uint,
-    pub ts_nsec: libc::c_uint, // really an union of ts_usec & ts_nsec
+    pub ts_union: tpacket_bd_ts_union,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Copy, Clone)]
+pub union tpacket_bd_ts_union {
+    pub ts_usec: libc::c_uint,
+    pub ts_nsec: libc::c_uint,
+}
+
+impl std::fmt::Debug for tpacket_bd_ts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("tpacket_bd_ts")
+            .field("ts_sec", &self.ts_sec)
+            .field("ts_nsec", unsafe { &self.ts_union.ts_nsec })
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for tpacket_bd_ts_union {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unsafe { write!(f, "{}", self.ts_nsec) }
+    }
+}
+
+#[repr(C, align(8))]
+#[derive(Debug, Copy, Clone)]
 pub struct tpacket_hdr_v1 {
     pub block_status: u32,
-    pub num_packets: u32,
+    pub num_pkts: u32,
     pub offset_to_first_pkt: u32,
     pub blk_len: u32,
-    pub seq_num: u32,
-    pub ts_first_packet: tpacket_bd_ts,
-    pub ts_last_packet: tpacket_bd_ts,
+    pub seq_num: u64,
+    pub ts_first_pkt: tpacket_bd_ts,
+    pub ts_last_pkt: tpacket_bd_ts,
 }
 
 #[repr(C)]
@@ -91,7 +122,7 @@ pub struct tpacket_hdr_v1 {
 pub struct tpacket_block_desc {
     pub version: u32,
     pub offset_to_priv: u32,
-    pub hdr: tpacket_hdr_v1,
+    pub hdr: tpacket_bd_header_u,
 }
 
 #[repr(C)]
@@ -101,3 +132,18 @@ pub struct tpacket_stats_v3 {
     pub tp_drops: libc::c_uint,
     pub tp_freeze_q_cnt: libc::c_uint,
 }
+
+#[repr(C)]
+pub union tpacket_bd_header_u {
+    pub bh1: tpacket_hdr_v1,
+}
+
+use std::fmt;
+
+impl fmt::Debug for tpacket_bd_header_u {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe { self.bh1.fmt(f) }
+    }
+}
+
+pub const TPACKET_ALIGNMENT: usize = 16;

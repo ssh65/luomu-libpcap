@@ -72,19 +72,19 @@ unsafe impl Send for BlockDescriptor<'_> {}
 
 impl<'a> BlockDescriptor<'a> {
     pub fn flush(&mut self) {
-        self.desc.hdr.block_status = if_packet::TP_STATUS_KERNEL;
+        unsafe { self.desc.hdr.bh1.block_status = if_packet::TP_STATUS_KERNEL; }
     }
 
     pub fn is_ready(&self) -> bool {
-        self.desc.hdr.block_status & if_packet::TP_STATUS_USER != 0
+        unsafe { self.desc.hdr.bh1.block_status & if_packet::TP_STATUS_USER != 0 }
     }
 
     pub fn get_number_of_packets(&self) -> u32 {
-        self.desc.hdr.num_packets
+        unsafe { self.desc.hdr.bh1.num_pkts }
     }
 
     pub fn get_first_packet(&self) -> PacketDescriptor<'a> {
-        let offset = isize::try_from(self.desc.hdr.offset_to_first_pkt).unwrap_or(isize::MAX);
+        let offset = isize::try_from(unsafe { self.desc.hdr.bh1.offset_to_first_pkt }).unwrap_or(isize::MAX);
         unsafe { self.ptr.offset(offset) }.into()
     }
 }
@@ -162,7 +162,7 @@ impl Map {
         );
         let my_ptr = self.ptr;
         let buf_ptr = my_ptr.cast::<u8>();
-        let block_size = isize::try_from(self.block_count).unwrap_or(isize::MAX);
+        let block_size = isize::try_from(self.block_size).unwrap_or(isize::MAX);  // Fixed: was using block_count instead of block_size!
         let offset = index * block_size;
         unsafe { buf_ptr.offset(offset) }
     }
