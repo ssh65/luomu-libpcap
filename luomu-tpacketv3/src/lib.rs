@@ -126,6 +126,7 @@ pub fn reader<'a>(
     interface: &str,
     pcap_filter: Option<&str>,
     parameters: ReaderParameters,
+    promisc_enabled: bool,
 ) -> Result<Reader<'a>, String> {
     let index = ifindex_for(interface);
     let sock = socket::Fd::create().map_err(|e| format!("Can not create socket {e}"))?;
@@ -165,16 +166,20 @@ pub fn reader<'a>(
             .map_err(|e| format!("Can not set filter: {e}"))?;
     }
 
-    tracing::trace!("Not Setting PROMISC mode");
-    // let mr = libc::packet_mreq {
-    //     mr_ifindex: libc::c_int::try_from(index).unwrap_or(libc::c_int::MAX),
-    //     #[allow(clippy::cast_possible_truncation)]
-    //     mr_type: libc::PACKET_MR_PROMISC as u16,
-    //     mr_alen: 0,
-    //     mr_address: [0; 8],
-    // };
-    // sock.setopt(&socket::Option::PacketAddMembership(socket::OptValue { val: mr }))
-    //     .map_err(|e| format!("ADD_MEMBERSHIP sockopt failed: {e}"))?;
+    if promisc_enabled {
+        tracing::trace!("Setting PROMISC mode");
+        let mr = libc::packet_mreq {
+            mr_ifindex: libc::c_int::try_from(index).unwrap_or(libc::c_int::MAX),
+            #[allow(clippy::cast_possible_truncation)]
+            mr_type: libc::PACKET_MR_PROMISC as u16,
+            mr_alen: 0,
+            mr_address: [0; 8],
+        };
+        sock.setopt(&socket::Option::PacketAddMembership(socket::OptValue { val: mr }))
+            .map_err(|e| format!("ADD_MEMBERSHIP sockopt failed: {e}"))?;
+    } else {
+        tracing::trace!("Not Setting PROMISC mode");
+    }
 
     tracing::trace!("Mapping ring");
     let map = ringbuf::Map::create(parameters.block_size, parameters.block_count, sock.raw_fd())
